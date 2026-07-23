@@ -59,8 +59,12 @@ GPT_BACKEND: str = os.environ.get("SUBAI_GPT_BACKEND", "auto").strip().lower()
 # covered by your ChatGPT plan instead of API billing.
 CODEX_CMD: str = os.environ.get("SUBAI_CODEX_CMD", "codex").strip()
 
-# Args inserted before the prompt (space-split). `exec` runs non-interactively.
-CODEX_ARGS: str = os.environ.get("SUBAI_CODEX_ARGS", "exec").strip()
+# Args inserted before the prompt (space-split). `exec` runs non-interactively;
+# `--skip-git-repo-check` lets it run outside a git/trusted directory (the MCP
+# server's working dir is arbitrary).
+CODEX_ARGS: str = os.environ.get(
+    "SUBAI_CODEX_ARGS", "exec --skip-git-repo-check"
+).strip()
 
 CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 180)
 
