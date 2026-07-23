@@ -100,6 +100,28 @@ def ask(prompt: str, model: str = "") -> dict:
     return _chat(system, prompt, model=model or None)
 
 
+def analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
+    """Delegate log reading & judgement to ChatGPT.
+
+    Offloads the token-heavy work of scanning verbose logcat output: ChatGPT
+    reads the logs and returns a compact verdict (severity, likely root cause,
+    suggested next step), so only the conclusion flows back to Claude.
+    """
+    system = (
+        "You are an Android logcat analysis expert. Read the provided log "
+        "lines and judge them. Respond compactly with: (1) SEVERITY "
+        "[ok | warning | error | crash], (2) a one-line summary, (3) the most "
+        "likely root cause if any problem is present, (4) a concrete suggested "
+        "next step. If a specific question is asked, answer it directly first. "
+        "Do not echo the raw logs back."
+    )
+    user = ""
+    if question:
+        user += f"Question: {question}\n\n"
+    user += f"Log lines:\n{logs}"
+    return _chat(system, user, model=model or None)
+
+
 def review(code_snippet: str, focus: str = "", model: str = "") -> dict:
     """Delegate a code review / improvement pass."""
     system = (

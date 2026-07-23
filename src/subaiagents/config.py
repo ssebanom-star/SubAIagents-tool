@@ -36,6 +36,15 @@ SCREENSHOT_DIR: str = os.environ.get(
     os.path.join(os.getcwd(), "adb_screenshots"),
 ).strip()
 
+# --- Real-time log monitoring ---------------------------------------------
+
+# Max lines retained per live logcat session (ring buffer).
+LOG_BUFFER_LINES: int = _int_env("SUBAI_LOG_BUFFER_LINES", 5000)
+
+# Upper bound (seconds) for a single adb_logcat_watch call so a tool never
+# blocks the server indefinitely.
+LOG_WATCH_MAX_TIMEOUT: int = _int_env("SUBAI_LOG_WATCH_MAX_TIMEOUT", 300)
+
 
 # --- ChatGPT / OpenAI related ---------------------------------------------
 

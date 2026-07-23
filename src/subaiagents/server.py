@@ -15,6 +15,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import adb as _adb
 from . import chatgpt as _chatgpt
+from .logmon import monitor as _monitor
 
 mcp = FastMCP("subaiagents")
 
@@ -145,6 +146,101 @@ def adb_disconnect(host_port: str = "") -> dict:
 
 
 # --------------------------------------------------------------------------
+# Real-time log monitoring tools
+# --------------------------------------------------------------------------
+
+@mcp.tool()
+def adb_logcat_start(filter_spec: str = "", serial: Optional[str] = None,
+                     clear_first: bool = True) -> dict:
+    """Start a background real-time logcat session; returns a session_id.
+
+    The session keeps capturing logs in the background. Poll it with
+    adb_logcat_read, wait for a pattern with adb_logcat_watch, or have GPT
+    judge it with adb_logcat_analyze.
+
+    Args:
+        filter_spec: Optional logcat filter, e.g. "MyTag:D *:S" or "*:E".
+        serial: Optional device serial.
+        clear_first: Clear the log buffer before starting (fresh capture).
+    """
+    return _monitor.start(filter_spec=filter_spec, serial=serial,
+                          clear_first=clear_first)
+
+
+@mcp.tool()
+def adb_logcat_read(session_id: str, max_lines: int = 500) -> dict:
+    """Return only the log lines captured since the previous read (cursor advances)."""
+    session = _monitor.get(session_id)
+    if not session:
+        return {"ok": False, "error": f"No such session: {session_id}"}
+    return session.read_new(max_lines=max_lines)
+
+
+@mcp.tool()
+def adb_logcat_tail(session_id: str, lines: int = 100) -> dict:
+    """Peek the last N buffered lines without moving the read cursor."""
+    session = _monitor.get(session_id)
+    if not session:
+        return {"ok": False, "error": f"No such session: {session_id}"}
+    return {"ok": True, "session_id": session_id, "alive": session.alive,
+            "lines": session.tail(lines)}
+
+
+@mcp.tool()
+def adb_logcat_watch(session_id: str, pattern: str, timeout: int = 30) -> dict:
+    """Block until a regex pattern appears in incoming logs, or timeout.
+
+    Useful for "wait until a crash / specific event happens". Bounded by
+    SUBAI_LOG_WATCH_MAX_TIMEOUT.
+    """
+    session = _monitor.get(session_id)
+    if not session:
+        return {"ok": False, "error": f"No such session: {session_id}"}
+    return session.watch(pattern=pattern, timeout=timeout)
+
+
+@mcp.tool()
+def adb_logcat_analyze(session_id: str, question: str = "", lines: int = 300,
+                       model: str = "") -> dict:
+    """Hand recent logs to the ChatGPT sub-agent to read and judge.
+
+    Reads the last `lines` from the session and asks ChatGPT for a verdict
+    (severity, summary, likely root cause, next step). This offloads the
+    token-heavy log scanning from Claude — only the conclusion comes back.
+
+    Args:
+        session_id: The logcat session to analyze.
+        question: Optional specific question (e.g. "왜 앱이 죽었어?").
+        lines: How many recent lines to feed to GPT.
+        model: Optional model override.
+    """
+    session = _monitor.get(session_id)
+    if not session:
+        return {"ok": False, "error": f"No such session: {session_id}"}
+    tail = session.tail(lines)
+    if not tail:
+        return {"ok": True, "session_id": session_id,
+                "note": "No log lines captured yet.", "content": ""}
+    result = _chatgpt.analyze_logs("\n".join(tail), question=question,
+                                   model=model)
+    result["session_id"] = session_id
+    result["lines_analyzed"] = len(tail)
+    return result
+
+
+@mcp.tool()
+def adb_logcat_stop(session_id: str) -> dict:
+    """Stop and remove a background logcat session."""
+    return _monitor.stop(session_id)
+
+
+@mcp.tool()
+def adb_logcat_list() -> dict:
+    """List active background logcat sessions."""
+    return _monitor.list()
+
+
+# --------------------------------------------------------------------------
 # ChatGPT sub-agent tools
 # --------------------------------------------------------------------------
 
@@ -175,6 +271,16 @@ def chatgpt_ask(prompt: str, model: str = "") -> dict:
 def chatgpt_review(code_snippet: str, focus: str = "", model: str = "") -> dict:
     """Delegate a code review pass to ChatGPT."""
     return _chatgpt.review(code_snippet, focus=focus, model=model)
+
+
+@mcp.tool()
+def chatgpt_analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
+    """Have ChatGPT read & judge arbitrary log text (not tied to a session).
+
+    Use when you already have log lines (from adb_logcat, a file, etc.) and
+    want GPT to do the reading/judging to save Claude tokens.
+    """
+    return _chatgpt.analyze_logs(logs, question=question, model=model)
 
 
 def main() -> None:

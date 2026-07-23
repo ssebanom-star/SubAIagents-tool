@@ -8,9 +8,10 @@ Windows의 **Claude Code**에서 (별도 프로그램 터미널 없이) **ADB로
 ## 핵심 아이디어
 
 - Claude Code는 **MCP 서버**의 도구를 직접 툴콜로 호출합니다 → 터미널을 따로 열 필요가 없습니다.
-- 이 서버는 두 종류의 도구를 노출합니다.
+- 이 서버는 세 종류의 도구를 노출합니다.
   - **`adb_*`** : 연결된 기기 제어(shell, 설치, 파일전송, 로그, 스크린샷, UI 입력 등)
-  - **`chatgpt_*`** : 부가/보일러플레이트 코딩·리서치를 ChatGPT에 위임 → Claude는 "무엇을 맡길지"만 판단하고 긴 출력은 ChatGPT가 생성 → **토큰 절약**
+  - **`adb_logcat_*`** : **실시간 로그 모니터링** — 백그라운드 세션으로 로그를 계속 수집하고, 새 로그만 읽기/패턴 감시/**GPT에게 분석·판단 위임**
+  - **`chatgpt_*`** : 부가/보일러플레이트 코딩·리서치·로그분석을 ChatGPT에 위임 → Claude는 "무엇을 맡길지"만 판단하고 긴 출력은 ChatGPT가 생성 → **토큰 절약**
 
 ## 요구 사항
 
@@ -83,10 +84,24 @@ claude mcp add subaiagents -- python -m subaiagents.server
 
 모든 도구는 선택적 `serial` 인자로 기기를 지정할 수 있습니다(미지정 시 기본 기기).
 
+### 실시간 로그 모니터링
+백그라운드에서 `adb logcat`을 계속 돌리며 로그를 버퍼에 수집합니다. MCP는 스트리밍 푸시가 안 되므로
+"세션 시작 → 폴링/감시/분석" 방식으로 실시간 로그를 다룹니다.
+
+- `adb_logcat_start(filter_spec="", serial=None, clear_first=True)` — 백그라운드 로그 세션 시작 → `session_id` 반환
+- `adb_logcat_read(session_id, max_lines=500)` — **직전 읽은 이후의 새 로그만** 반환(커서 자동 전진)
+- `adb_logcat_tail(session_id, lines=100)` — 커서 이동 없이 최근 N줄 엿보기
+- `adb_logcat_watch(session_id, pattern, timeout=30)` — 정규식 패턴이 뜰 때까지 대기(예: 크래시 감시)
+- `adb_logcat_analyze(session_id, question="", lines=300, model="")` — **최근 로그를 GPT가 읽고 판단**(심각도·요약·원인·다음 조치)
+- `adb_logcat_stop(session_id)` / `adb_logcat_list()` — 세션 종료 / 목록
+
+버퍼 크기는 `SUBAI_LOG_BUFFER_LINES`(기본 5000), 감시 최대 대기시간은 `SUBAI_LOG_WATCH_MAX_TIMEOUT`(기본 300초)로 조정합니다.
+
 ### ChatGPT 서브에이전트
 - `chatgpt_code(task, context="", language="", model="")` — 부가 코딩 위임(코드만 반환)
 - `chatgpt_ask(prompt, model="")` — 일반 질의/리서치 위임
 - `chatgpt_review(code_snippet, focus="", model="")` — 코드 리뷰 위임
+- `chatgpt_analyze_logs(logs, question="", model="")` — 임의의 로그 텍스트를 GPT가 읽고 판단(세션 무관)
 
 ## 사용 예 (Claude Code에서 자연어로)
 
@@ -94,6 +109,15 @@ claude mcp add subaiagents -- python -m subaiagents.server
 - "com.example.app 로그 최근 100줄 봐줘" → `adb_logcat`
 - "지금 화면 스크린샷 찍어줘" → `adb_screenshot`
 - "이 반복적인 파서 함수는 ChatGPT한테 파이썬으로 짜달라고 해" → `chatgpt_code`
+- "지금부터 로그 실시간으로 감시하다가 크래시 뜨면 알려줘" → `adb_logcat_start` + `adb_logcat_watch`
+- "방금 쌓인 로그 GPT한테 왜 앱이 죽었는지 분석시켜줘" → `adb_logcat_analyze`
+
+#### 실시간 모니터링 흐름 예시
+1. `adb_logcat_start(filter_spec="*:E")` → `session_id` 획득
+2. 앱에서 문제 재현
+3. `adb_logcat_watch(session_id, pattern="FATAL EXCEPTION", timeout=60)` — 크래시 대기
+4. `adb_logcat_analyze(session_id, question="크래시 원인과 해결책은?")` — **GPT가 로그를 읽고 판단** (Claude 토큰 절약)
+5. `adb_logcat_stop(session_id)`
 
 ## 진단
 
