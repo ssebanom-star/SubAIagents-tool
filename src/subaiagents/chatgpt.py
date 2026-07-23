@@ -88,29 +88,72 @@ def _codex_chat(system: str, user: str) -> dict:
             ),
         }
 
+    import os
+    import tempfile
+
     prompt = f"{system}\n\n{user}" if system else user
-    cmd = [exe] + config.CODEX_ARGS.split() + [prompt]
+    args = config.CODEX_ARGS.split()
+
+    # Capture just the final agent message to a temp file (clean output without
+    # the streaming preamble). Only add it for `exec` runs that don't set it.
+    last_msg_file = None
+    if "exec" in args and "--output-last-message" not in args:
+        fd, last_msg_file = tempfile.mkstemp(prefix="subai_codex_", suffix=".txt")
+        os.close(fd)
+        args = args + ["--output-last-message", last_msg_file]
+
+    cmd = [exe] + args + [prompt]
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=config.CODEX_TIMEOUT
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=config.CODEX_TIMEOUT,
+            # Critical: give codex an empty stdin (EOF) so it never blocks
+            # waiting for input when there is no TTY (as under the MCP server).
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
+        _cleanup(last_msg_file)
         return {"ok": False, "content": "",
                 "error": f"Codex CLI timed out after {config.CODEX_TIMEOUT}s"}
     except Exception as exc:  # noqa: BLE001
+        _cleanup(last_msg_file)
         return {"ok": False, "content": "", "error": f"Codex CLI error: {exc}"}
+
+    # Prefer the clean last-message file; fall back to stdout.
+    content = ""
+    if last_msg_file and os.path.isfile(last_msg_file):
+        try:
+            with open(last_msg_file, "r", encoding="utf-8") as fh:
+                content = fh.read().strip()
+        except OSError:
+            pass
+    _cleanup(last_msg_file)
+    if not content:
+        content = proc.stdout.strip()
 
     if proc.returncode != 0:
         return {
             "ok": False,
-            "content": proc.stdout.strip(),
+            "content": content,
             "error": (proc.stderr.strip() or
                       f"Codex CLI exited with code {proc.returncode}. "
                       "If not logged in, run `codex login`."),
             "backend": "codex",
         }
-    return {"ok": True, "content": proc.stdout.strip(), "backend": "codex",
+    return {"ok": True, "content": content, "backend": "codex",
             "cost": "covered by ChatGPT subscription (no API billing)"}
+
+
+def _cleanup(path: Optional[str]) -> None:
+    if not path:
+        return
+    import os
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
