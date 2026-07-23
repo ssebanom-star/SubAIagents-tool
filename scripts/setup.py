@@ -81,6 +81,44 @@ def write_claude_desktop(server_config: dict) -> None:
     print("     -> FULLY quit Claude (system tray → Quit) and reopen it.")
 
 
+def write_claude_code(server_config: dict) -> None:
+    """Merge our server into the Claude Code user config (~/.claude.json).
+
+    This is what the Claude Code desktop app / CLI reads for MCP servers. We
+    only touch the top-level `mcpServers` key and leave everything else intact,
+    keeping a timestamped backup first.
+    """
+    import time
+
+    path = os.path.expanduser("~/.claude.json")
+    data: dict = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"[warn] {path} unreadable ({exc}); not touching it. "
+                  "Register the server through the app UI instead.")
+            return
+        # Back up before modifying an existing (possibly large) config.
+        backup = f"{path}.bak.{int(time.time())}"
+        try:
+            with open(backup, "w", encoding="utf-8") as bf:
+                json.dump(data, bf, ensure_ascii=False)
+            print(f"[ok] Backed up existing config to {backup}")
+        except OSError:
+            pass
+
+    servers = data.setdefault("mcpServers", {})
+    servers["subaiagents"] = server_config
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    print(f"[ok] Registered in Claude Code config: {path}")
+    print("     -> Fully quit the Claude app (Task Manager if needed) and reopen,")
+    print("        then use a LOCAL session (not a remote/cloud one) so it can")
+    print("        reach your USB device.")
+
+
 def persist_windows_env(name: str, value: str) -> None:
     """Persist a user env var on Windows via setx (best effort)."""
     if os.name != "nt":
@@ -106,7 +144,10 @@ def main() -> int:
     parser.add_argument("--print-only", action="store_true",
                         help="Print the config/command without writing .mcp.json.")
     parser.add_argument("--claude-desktop", action="store_true",
-                        help="Also register into the Claude Desktop app's config.")
+                        help="Also register into the Claude Desktop (chat) app config.")
+    parser.add_argument("--claude-code", action="store_true",
+                        help="Also register into the Claude Code config (~/.claude.json) "
+                             "used by the Claude Code desktop app / CLI.")
     args = parser.parse_args()
 
     import shutil
@@ -171,6 +212,8 @@ def main() -> int:
         print(f"[ok] Wrote {target}")
         if args.claude_desktop:
             write_claude_desktop(mcp_config["mcpServers"]["subaiagents"])
+        if args.claude_code:
+            write_claude_code(mcp_config["mcpServers"]["subaiagents"])
 
     if args.persist:
         if adb_path:
