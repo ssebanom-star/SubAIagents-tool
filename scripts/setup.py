@@ -69,24 +69,37 @@ def main() -> int:
                         help="Print the config/command without writing .mcp.json.")
     args = parser.parse_args()
 
+    import shutil
+
     python_exe = os.path.abspath(sys.executable)
     adb_path = resolve_adb(args.adb_path)
+    codex_path = (config.CODEX_CMD if os.path.isfile(config.CODEX_CMD)
+                  else shutil.which(config.CODEX_CMD))
 
     print("== Resolved paths ==")
-    print(f"  python : {python_exe}")
-    print(f"  src    : {SRC}")
-    print(f"  adb    : {adb_path or '(NOT FOUND — install platform-tools or pass --adb-path)'}")
-    print(f"  model  : {args.openai_model}")
-    print(f"  openai : {'set' if args.openai_key else '(not provided — ADB still works)'}")
+    print(f"  python  : {python_exe}")
+    print(f"  src     : {SRC}")
+    print(f"  adb     : {adb_path or '(NOT FOUND — install platform-tools or pass --adb-path)'}")
+    if codex_path:
+        print(f"  codex   : {codex_path}  -> ChatGPT subscription, no API cost")
+    else:
+        print("  codex   : (not found — recommended: npm i -g @openai/codex && codex login)")
+    print(f"  openai  : {'set (API fallback, billed)' if args.openai_key else '(not provided)'}")
     print()
 
     # Build env with all absolute paths. PYTHONPATH guarantees the package is
     # importable whether or not it was pip-installed → no PATH surprises.
-    env: dict[str, str] = {"PYTHONPATH": SRC, "OPENAI_MODEL": args.openai_model}
+    env: dict[str, str] = {"PYTHONPATH": SRC}
     if adb_path:
         env["ADB_PATH"] = adb_path
+    # Sub-agent: prefer Codex CLI (subscription, no API cost); else API key.
+    if codex_path:
+        env["SUBAI_GPT_BACKEND"] = "codex"
     if args.openai_key:
         env["OPENAI_API_KEY"] = args.openai_key
+        env["OPENAI_MODEL"] = args.openai_model
+        if not codex_path:
+            env["SUBAI_GPT_BACKEND"] = "api"
 
     mcp_config = {
         "mcpServers": {
@@ -123,6 +136,14 @@ def main() -> int:
         if args.openai_key:
             persist_windows_env("OPENAI_API_KEY", args.openai_key)
 
+    print()
+    if codex_path:
+        print("NOTE: sub-agent uses the Codex CLI (your ChatGPT subscription, no "
+              "API cost). Run `codex login` once if you haven't.")
+    elif not args.openai_key:
+        print("NOTE: no sub-agent backend yet. For no API cost, install Codex CLI "
+              "(npm i -g @openai/codex && codex login) and re-run. "
+              "ADB features work regardless.")
     print()
     if not adb_path:
         print("NEXT: install Android platform-tools, then re-run this script "

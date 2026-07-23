@@ -13,11 +13,23 @@ Windows의 **Claude Code**에서 (별도 프로그램 터미널 없이) **ADB로
   - **`adb_logcat_*`** : **실시간 로그 모니터링** — 백그라운드 세션으로 로그를 계속 수집하고, 새 로그만 읽기/패턴 감시/**GPT에게 분석·판단 위임**
   - **`chatgpt_*`** : 부가/보일러플레이트 코딩·리서치·로그분석을 ChatGPT에 위임 → Claude는 "무엇을 맡길지"만 판단하고 긴 출력은 ChatGPT가 생성 → **토큰 절약**
 
+### 서브에이전트 백엔드 (비용)
+
+| 백엔드 | 인증 | 비용 |
+|--------|------|------|
+| **Codex CLI** (권장, 기본) | `codex login` → **ChatGPT 구독 로그인** | **API 과금 없음** (구독 요금제 사용) |
+| OpenAI API | `OPENAI_API_KEY` | 토큰당 과금 |
+
+`codex` 명령이 있으면 자동으로 Codex CLI를 씁니다(=이미 구독 중인 앱 활용, 추가 비용 없음).
+`SUBAI_GPT_BACKEND` 로 강제 지정 가능(`auto`/`codex`/`api`).
+
 ## 요구 사항
 
 - Python 3.10 이상
 - [Android platform-tools](https://developer.android.com/tools/releases/platform-tools) (`adb.exe`)
-- (선택) OpenAI API 키 — ChatGPT 서브에이전트 사용 시
+- (선택) ChatGPT 서브에이전트를 쓰려면 둘 중 하나:
+  - **Codex CLI** (`npm install -g @openai/codex` 후 `codex login`) — **구독으로 동작, API 비용 없음** ← 권장
+  - 또는 OpenAI API 키 (`OPENAI_API_KEY`) — 토큰당 과금
 
 ## 설치
 
@@ -32,12 +44,14 @@ pip install -r requirements.txt
 
 ### 방법 A — 자동 셋업 (권장, 경로 직접 안 만짐)
 
-아래 한 줄이 **python·adb·프로젝트 경로를 전부 자동으로 찾아** 동작하는 `.mcp.json`을 생성합니다.
+아래 한 줄이 **python·adb·codex·프로젝트 경로를 전부 자동으로 찾아** 동작하는 `.mcp.json`을 생성합니다.
 
 ```powershell
-python scripts/setup.py --openai-key sk-...
+python scripts/setup.py
 ```
 
+- `codex` 명령이 있으면 자동으로 **구독 기반(무과금)** 백엔드로 설정됩니다 (먼저 `codex login` 한 번)
+- API를 쓰려면: `python scripts/setup.py --openai-key sk-...`
 - adb를 자동으로 못 찾으면 `--adb-path C:\platform-tools\adb.exe` 로 지정
 - 환경변수까지 영구 저장하려면 `--persist` 추가 (Windows `setx`)
 - 파일 안 쓰고 확인만: `--print-only`
@@ -78,7 +92,10 @@ claude mcp add subaiagents -- python -m subaiagents.server
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| `OPENAI_API_KEY` | ChatGPT 서브에이전트 키 | (없으면 chatgpt_* 도구가 안내 메시지 반환) |
+| `SUBAI_GPT_BACKEND` | 서브에이전트 백엔드 `auto`/`codex`/`api` | `auto` (codex 있으면 codex) |
+| `SUBAI_CODEX_CMD` | Codex CLI 실행 파일 | `codex` |
+| `SUBAI_CODEX_ARGS` | Codex 호출 인자(프롬프트 앞) | `exec` |
+| `OPENAI_API_KEY` | (API 백엔드용) ChatGPT 키 | (없어도 codex로 동작 가능) |
 | `OPENAI_MODEL` | 위임 모델 | `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | 커스텀/Azure 엔드포인트 | (선택) |
 | `OPENAI_MAX_TOKENS` | 위임 출력 상한 | `2048` |

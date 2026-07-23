@@ -1,12 +1,20 @@
 """ChatGPT sub-agent.
 
-Delegates auxiliary / boilerplate coding and lookups to the OpenAI API so
-that the primary Claude Code agent spends fewer tokens: Claude decides *what*
-to delegate, ChatGPT produces the bulk output, and only the result flows back.
+Delegates auxiliary / boilerplate coding and lookups so the primary Claude
+Code agent spends fewer tokens: Claude decides *what* to delegate, the
+sub-agent produces the bulk output, and only the result flows back.
+
+Two backends (see config.GPT_BACKEND):
+  * "codex" — shells out to the Codex CLI (`codex exec`). If you sign in with
+    "Sign in with ChatGPT", usage is covered by your ChatGPT subscription, so
+    there is NO per-token API cost. This is the default when `codex` is found.
+  * "api"   — calls the OpenAI API with OPENAI_API_KEY (billed per token).
 """
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from typing import Optional
 
 from . import config
@@ -23,8 +31,10 @@ def _get_client():
 
     if not config.OPENAI_API_KEY:
         _client_error = (
-            "OPENAI_API_KEY is not set. Set it in the MCP server env to enable "
-            "the ChatGPT sub-agent."
+            "No sub-agent backend available. Recommended (no extra cost): "
+            "install the Codex CLI (npm install -g @openai/codex) and run "
+            "`codex login` to use your ChatGPT subscription. Alternatively set "
+            "OPENAI_API_KEY to use the OpenAI API (billed per token)."
         )
         return None
 
@@ -43,7 +53,70 @@ def _get_client():
     return _client
 
 
+def _codex_executable() -> Optional[str]:
+    """Return the Codex CLI path if available, else None."""
+    import os
+
+    cmd = config.CODEX_CMD
+    if os.path.isfile(cmd):
+        return cmd
+    return shutil.which(cmd)
+
+
+def _select_backend() -> str:
+    """Decide which backend to use based on config and availability."""
+    if config.GPT_BACKEND == "codex":
+        return "codex"
+    if config.GPT_BACKEND == "api":
+        return "api"
+    # auto: prefer the no-extra-cost Codex CLI when present.
+    return "codex" if _codex_executable() else "api"
+
+
+def _codex_chat(system: str, user: str) -> dict:
+    """Run the sub-agent via the Codex CLI (uses your ChatGPT subscription)."""
+    exe = _codex_executable()
+    if not exe:
+        return {
+            "ok": False,
+            "content": "",
+            "error": (
+                f"Codex CLI ('{config.CODEX_CMD}') not found. Install it "
+                "(npm install -g @openai/codex) and run `codex login` to sign "
+                "in with your ChatGPT account — no API key needed. Or set "
+                "SUBAI_GPT_BACKEND=api to use the OpenAI API instead."
+            ),
+        }
+
+    prompt = f"{system}\n\n{user}" if system else user
+    cmd = [exe] + config.CODEX_ARGS.split() + [prompt]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=config.CODEX_TIMEOUT
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "content": "",
+                "error": f"Codex CLI timed out after {config.CODEX_TIMEOUT}s"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "content": "", "error": f"Codex CLI error: {exc}"}
+
+    if proc.returncode != 0:
+        return {
+            "ok": False,
+            "content": proc.stdout.strip(),
+            "error": (proc.stderr.strip() or
+                      f"Codex CLI exited with code {proc.returncode}. "
+                      "If not logged in, run `codex login`."),
+            "backend": "codex",
+        }
+    return {"ok": True, "content": proc.stdout.strip(), "backend": "codex",
+            "cost": "covered by ChatGPT subscription (no API billing)"}
+
+
 def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
+    if _select_backend() == "codex":
+        return _codex_chat(system, user)
+
     client = _get_client()
     if client is None:
         return {"ok": False, "error": _client_error, "content": ""}
@@ -66,6 +139,7 @@ def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
     return {
         "ok": True,
         "content": choice.strip(),
+        "backend": "api",
         "model": resp.model,
         "usage": {
             "prompt_tokens": getattr(usage, "prompt_tokens", None),

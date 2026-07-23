@@ -40,22 +40,35 @@ def check_adb() -> bool:
 
 
 def check_chatgpt() -> bool:
-    print("== ChatGPT sub-agent ==")
-    ok = True
+    import shutil
+
+    print("== Sub-agent backend (ChatGPT / Codex) ==")
+    print(f"  [info] SUBAI_GPT_BACKEND = {config.GPT_BACKEND}")
+
+    codex = (config.CODEX_CMD if os.path.isfile(config.CODEX_CMD)
+             else shutil.which(config.CODEX_CMD))
+    if codex:
+        print(f"  [ok] Codex CLI found: {codex}")
+        print("       -> uses your ChatGPT subscription (no per-token API cost).")
+        print("       Make sure you've run `codex login` once.")
+        return True
+
+    print("  [warn] Codex CLI not found (recommended, no API cost).")
+    print("         Install: npm install -g @openai/codex  then: codex login")
+
     if config.OPENAI_API_KEY:
-        print("  [ok] OPENAI_API_KEY is set.")
-    else:
-        print("  [warn] OPENAI_API_KEY not set — chatgpt_* tools will return an "
-              "instructive error until configured.")
-        ok = False
-    print(f"  [info] model: {config.OPENAI_MODEL}")
-    try:
-        import openai  # noqa: F401
-        print("  [ok] openai package importable.")
-    except ImportError:
-        print("  [FAIL] openai package missing — run: pip install openai")
-        ok = False
-    return ok
+        print("  [ok] OPENAI_API_KEY is set (API fallback available, billed per token).")
+        try:
+            import openai  # noqa: F401
+            print("  [ok] openai package importable.")
+            return True
+        except ImportError:
+            print("  [FAIL] openai package missing — run: pip install openai")
+            return False
+
+    print("  [warn] Neither Codex CLI nor OPENAI_API_KEY available — "
+          "chatgpt_* tools will return an instructive error until configured.")
+    return False
 
 
 def main() -> int:

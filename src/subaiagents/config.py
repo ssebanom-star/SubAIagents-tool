@@ -46,6 +46,25 @@ LOG_BUFFER_LINES: int = _int_env("SUBAI_LOG_BUFFER_LINES", 5000)
 LOG_WATCH_MAX_TIMEOUT: int = _int_env("SUBAI_LOG_WATCH_MAX_TIMEOUT", 300)
 
 
+# --- Sub-agent backend -----------------------------------------------------
+
+# Which backend the chatgpt_* / analyze tools use:
+#   "auto"  -> prefer the Codex CLI if present (uses your ChatGPT subscription,
+#              no per-token API cost), otherwise fall back to the OpenAI API.
+#   "codex" -> always use the Codex CLI.
+#   "api"   -> always use the OpenAI API (billed per token).
+GPT_BACKEND: str = os.environ.get("SUBAI_GPT_BACKEND", "auto").strip().lower()
+
+# Codex CLI executable. Logging in with "Sign in with ChatGPT" means usage is
+# covered by your ChatGPT plan instead of API billing.
+CODEX_CMD: str = os.environ.get("SUBAI_CODEX_CMD", "codex").strip()
+
+# Args inserted before the prompt (space-split). `exec` runs non-interactively.
+CODEX_ARGS: str = os.environ.get("SUBAI_CODEX_ARGS", "exec").strip()
+
+CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 180)
+
+
 # --- ChatGPT / OpenAI related ---------------------------------------------
 
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "").strip()
