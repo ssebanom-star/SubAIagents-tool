@@ -40,13 +40,12 @@ def check_adb() -> bool:
 
 
 def check_chatgpt() -> bool:
-    import shutil
+    from subaiagents import chatgpt
 
     print("== Sub-agent backend (ChatGPT / Codex) ==")
     print(f"  [info] SUBAI_GPT_BACKEND = {config.GPT_BACKEND}")
 
-    codex = (config.CODEX_CMD if os.path.isfile(config.CODEX_CMD)
-             else shutil.which(config.CODEX_CMD))
+    codex = chatgpt.find_codex()
     if codex:
         print(f"  [ok] Codex CLI found: {codex}")
         print("       -> uses your ChatGPT subscription (no per-token API cost).")

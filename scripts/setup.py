@@ -150,12 +150,11 @@ def main() -> int:
                              "used by the Claude Code desktop app / CLI.")
     args = parser.parse_args()
 
-    import shutil
+    from subaiagents import chatgpt
 
     python_exe = os.path.abspath(sys.executable)
     adb_path = resolve_adb(args.adb_path)
-    codex_path = (config.CODEX_CMD if os.path.isfile(config.CODEX_CMD)
-                  else shutil.which(config.CODEX_CMD))
+    codex_path = chatgpt.find_codex()
 
     print("== Resolved paths ==")
     print(f"  python  : {python_exe}")
@@ -176,6 +175,9 @@ def main() -> int:
     # Sub-agent: prefer Codex CLI (subscription, no API cost); else API key.
     if codex_path:
         env["SUBAI_GPT_BACKEND"] = "codex"
+        # Bake the absolute path so the server finds codex even when the app
+        # launches it with a PATH that lacks the Codex install dir.
+        env["SUBAI_CODEX_CMD"] = codex_path
     if args.openai_key:
         env["OPENAI_API_KEY"] = args.openai_key
         env["OPENAI_MODEL"] = args.openai_model

@@ -84,14 +84,49 @@ def _get_client():
     return _client
 
 
-def _codex_executable() -> Optional[str]:
-    """Return the Codex CLI path if available, else None."""
+def _codex_candidates() -> list:
+    """Common Codex CLI install locations (mainly Windows).
+
+    The MCP server is often launched by an app with a PATH that differs from an
+    interactive shell, so `shutil.which` can miss codex even when it is
+    installed. We fall back to these absolute locations.
+    """
+    import os
+
+    exp = os.path.expandvars
+    return [
+        exp(r"%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe"),
+        exp(r"%LOCALAPPDATA%\Programs\OpenAI\Codex\codex.exe"),
+        exp(r"%USERPROFILE%\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe"),
+        exp(r"%APPDATA%\npm\codex.cmd"),
+        exp(r"%APPDATA%\npm\codex.exe"),
+        exp(r"%ProgramFiles%\OpenAI\Codex\bin\codex.exe"),
+        exp(r"%USERPROFILE%\scoop\apps\codex\current\codex.exe"),
+        os.path.expanduser("~/.local/bin/codex"),
+        "/usr/local/bin/codex",
+        "/opt/homebrew/bin/codex",
+    ]
+
+
+def find_codex() -> Optional[str]:
+    """Locate the Codex CLI: explicit path -> PATH -> common install dirs."""
     import os
 
     cmd = config.CODEX_CMD
     if os.path.isfile(cmd):
         return cmd
-    return shutil.which(cmd)
+    found = shutil.which(cmd)
+    if found:
+        return found
+    for candidate in _codex_candidates():
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _codex_executable() -> Optional[str]:
+    """Return the Codex CLI path if available, else None."""
+    return find_codex()
 
 
 def _select_backend() -> str:
