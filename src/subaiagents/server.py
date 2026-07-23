@@ -274,6 +274,24 @@ def chatgpt_review(code_snippet: str, focus: str = "", model: str = "") -> dict:
 
 
 @mcp.tool()
+def chatgpt_set_model(model: str) -> dict:
+    """Set the default model the sub-agent uses for later calls.
+
+    Applies to both backends: for Codex it maps to `codex -m <model>`
+    (e.g. "gpt-5-codex"), for the API it's the OpenAI model id (e.g. "gpt-4o").
+    Pass an empty string to clear the override and use the configured default.
+    Per-call `model=` arguments still take precedence over this.
+    """
+    return _chatgpt.set_model(model)
+
+
+@mcp.tool()
+def chatgpt_get_model() -> dict:
+    """Show the active sub-agent backend and its effective default model."""
+    return _chatgpt.get_model()
+
+
+@mcp.tool()
 def chatgpt_analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
     """Have ChatGPT read & judge arbitrary log text (not tied to a session).
 

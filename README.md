@@ -139,6 +139,15 @@ claude mcp add subaiagents -- python -m subaiagents.server
 - `chatgpt_ask(prompt, model="")` — 일반 질의/리서치 위임
 - `chatgpt_review(code_snippet, focus="", model="")` — 코드 리뷰 위임
 - `chatgpt_analyze_logs(logs, question="", model="")` — 임의의 로그 텍스트를 GPT가 읽고 판단(세션 무관)
+- `chatgpt_set_model(model)` / `chatgpt_get_model()` — **응답 모델 지정**/조회
+
+#### 응답 모델 지정
+모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > 환경변수 기본값 > 백엔드 기본값**.
+
+- 세션 중 바꾸기(재시작 불필요): Claude에게 *"모델을 gpt-5-codex로 바꿔줘"* → `chatgpt_set_model("gpt-5-codex")`
+- 한 번만 다른 모델로: 각 도구의 `model=` 인자 사용
+- 항상 특정 모델로: 환경변수 `SUBAI_CODEX_MODEL`(codex 백엔드) 또는 `OPENAI_MODEL`(api 백엔드)
+- Codex는 `-m <model>`로, API는 OpenAI 모델 id로 전달됩니다.
 
 ## 사용 예 (Claude Code에서 자연어로)
 

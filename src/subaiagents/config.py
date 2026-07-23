@@ -68,6 +68,10 @@ CODEX_ARGS: str = os.environ.get(
 
 CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 180)
 
+# Default model for the Codex backend (empty = Codex CLI's own default).
+# e.g. "gpt-5-codex", "o4-mini". Per-call `model` args override this.
+CODEX_MODEL: str = os.environ.get("SUBAI_CODEX_MODEL", "").strip()
+
 
 # --- ChatGPT / OpenAI related ---------------------------------------------
 

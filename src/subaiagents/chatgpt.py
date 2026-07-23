@@ -22,6 +22,37 @@ from . import config
 _client = None
 _client_error: Optional[str] = None
 
+# Runtime-selectable default model (set via set_model). Empty = use the
+# backend's configured/built-in default. Per-call `model` args still win.
+_runtime_model: str = ""
+
+
+def set_model(model: str) -> dict:
+    """Set the default model for subsequent sub-agent calls (both backends).
+
+    Pass an empty string to clear the override and fall back to the configured
+    default. Per-call `model` arguments still take precedence over this.
+    """
+    global _runtime_model
+    _runtime_model = (model or "").strip()
+    return get_model()
+
+
+def get_model() -> dict:
+    """Report the current backend and effective default model."""
+    backend = _select_backend()
+    if backend == "codex":
+        default = config.CODEX_MODEL or "(Codex CLI default)"
+    else:
+        default = config.OPENAI_MODEL
+    return {
+        "ok": True,
+        "backend": backend,
+        "runtime_override": _runtime_model or None,
+        "effective_default": _runtime_model or default,
+        "note": "Per-call model= arguments override this default.",
+    }
+
 
 def _get_client():
     """Lazily build the OpenAI client so a missing key never crashes startup."""
@@ -73,7 +104,7 @@ def _select_backend() -> str:
     return "codex" if _codex_executable() else "api"
 
 
-def _codex_chat(system: str, user: str) -> dict:
+def _codex_chat(system: str, user: str, model: str = "") -> dict:
     """Run the sub-agent via the Codex CLI (uses your ChatGPT subscription)."""
     exe = _codex_executable()
     if not exe:
@@ -93,6 +124,12 @@ def _codex_chat(system: str, user: str) -> dict:
 
     prompt = f"{system}\n\n{user}" if system else user
     args = config.CODEX_ARGS.split()
+
+    # Model selection: explicit arg > runtime override (already folded into
+    # `model` by _chat) > configured Codex default > Codex's own default.
+    effective_model = model or config.CODEX_MODEL
+    if effective_model and "-m" not in args and "--model" not in args:
+        args = args + ["-m", effective_model]
 
     # Capture just the final agent message to a temp file (clean output without
     # the streaming preamble). Only add it for `exec` runs that don't set it.
@@ -143,6 +180,7 @@ def _codex_chat(system: str, user: str) -> dict:
             "backend": "codex",
         }
     return {"ok": True, "content": content, "backend": "codex",
+            "model": effective_model or "(Codex CLI default)",
             "cost": "covered by ChatGPT subscription (no API billing)"}
 
 
@@ -157,8 +195,11 @@ def _cleanup(path: Optional[str]) -> None:
 
 
 def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
+    # Precedence: explicit per-call model > runtime override > backend default.
+    chosen = (model or "").strip() or _runtime_model
+
     if _select_backend() == "codex":
-        return _codex_chat(system, user)
+        return _codex_chat(system, user, model=chosen)
 
     client = _get_client()
     if client is None:
@@ -166,7 +207,7 @@ def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
 
     try:
         resp = client.chat.completions.create(
-            model=model or config.OPENAI_MODEL,
+            model=chosen or config.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
