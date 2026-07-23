@@ -30,13 +30,28 @@ pip install -r requirements.txt
 
 ## Claude Code에 등록 (Windows)
 
-### 방법 A — CLI
+### 방법 A — 자동 셋업 (권장, 경로 직접 안 만짐)
+
+아래 한 줄이 **python·adb·프로젝트 경로를 전부 자동으로 찾아** 동작하는 `.mcp.json`을 생성합니다.
+
+```powershell
+python scripts/setup.py --openai-key sk-...
+```
+
+- adb를 자동으로 못 찾으면 `--adb-path C:\platform-tools\adb.exe` 로 지정
+- 환경변수까지 영구 저장하려면 `--persist` 추가 (Windows `setx`)
+- 파일 안 쓰고 확인만: `--print-only`
+
+생성된 `.mcp.json`에는 절대경로가 채워지고 `PYTHONPATH`까지 지정되어 **PATH 설정 없이도** 동작합니다.
+실행 후 Claude Code를 재시작하고 `/mcp`로 확인하세요.
+
+### 방법 B — CLI 직접
 
 ```powershell
 claude mcp add subaiagents -- python -m subaiagents.server
 ```
 
-### 방법 B — 설정 파일 직접 편집
+### 방법 C — 설정 파일 직접 편집
 
 프로젝트 루트에 `.mcp.json`을 만들고 아래를 넣습니다. (키/경로는 본인 환경에 맞게)
 

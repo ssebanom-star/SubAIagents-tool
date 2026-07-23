@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 .env
+.mcp.json
 .venv/
 venv/
 adb_screenshots/

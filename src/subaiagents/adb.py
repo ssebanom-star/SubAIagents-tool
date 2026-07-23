@@ -22,10 +22,22 @@ class AdbError(RuntimeError):
 _WINDOWS_CANDIDATES = [
     r"C:\platform-tools\adb.exe",
     r"C:\adb\adb.exe",
+    r"C:\Android\platform-tools\adb.exe",
     os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe"),
     os.path.expandvars(r"%USERPROFILE%\AppData\Local\Android\Sdk\platform-tools\adb.exe"),
+    os.path.expandvars(r"%APPDATA%\..\Local\Android\Sdk\platform-tools\adb.exe"),
     os.path.expandvars(r"%ANDROID_HOME%\platform-tools\adb.exe"),
     os.path.expandvars(r"%ANDROID_SDK_ROOT%\platform-tools\adb.exe"),
+    os.path.expandvars(r"%ProgramFiles%\Android\platform-tools\adb.exe"),
+    os.path.expandvars(r"%ProgramFiles(x86)%\Android\android-sdk\platform-tools\adb.exe"),
+    os.path.expandvars(r"%USERPROFILE%\scoop\apps\adb\current\adb.exe"),
+    os.path.expandvars(r"%ProgramData%\chocolatey\lib\adb\tools\platform-tools\adb.exe"),
+    os.path.expandvars(r"%USERPROFILE%\Downloads\platform-tools\adb.exe"),
+    # Linux/macOS common locations (harmless on Windows).
+    "/usr/bin/adb",
+    "/usr/local/bin/adb",
+    os.path.expanduser("~/Android/Sdk/platform-tools/adb"),
+    os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"),
 ]
 
 
