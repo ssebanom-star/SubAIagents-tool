@@ -43,6 +43,44 @@ def resolve_adb(override: str) -> str | None:
         return None
 
 
+def claude_desktop_config_path() -> str:
+    """Location of the Claude Desktop app's MCP config for this OS."""
+    if os.name == "nt":
+        return os.path.join(os.environ.get("APPDATA", ""), "Claude",
+                            "claude_desktop_config.json")
+    if sys.platform == "darwin":
+        return os.path.expanduser(
+            "~/Library/Application Support/Claude/claude_desktop_config.json")
+    return os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
+
+
+def write_claude_desktop(server_config: dict) -> None:
+    """Merge our server into the Claude Desktop app's config (keeps others)."""
+    path = claude_desktop_config_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    data: dict = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"[warn] Existing config unreadable ({exc}); starting fresh. "
+                  f"A backup is kept at {path}.bak")
+            try:
+                os.replace(path, path + ".bak")
+            except OSError:
+                pass
+            data = {}
+
+    servers = data.setdefault("mcpServers", {})
+    servers["subaiagents"] = server_config
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    print(f"[ok] Registered in Claude Desktop config: {path}")
+    print("     -> FULLY quit Claude (system tray → Quit) and reopen it.")
+
+
 def persist_windows_env(name: str, value: str) -> None:
     """Persist a user env var on Windows via setx (best effort)."""
     if os.name != "nt":
@@ -67,6 +105,8 @@ def main() -> int:
                         help="Also persist env vars via setx (Windows only).")
     parser.add_argument("--print-only", action="store_true",
                         help="Print the config/command without writing .mcp.json.")
+    parser.add_argument("--claude-desktop", action="store_true",
+                        help="Also register into the Claude Desktop app's config.")
     args = parser.parse_args()
 
     import shutil
@@ -123,12 +163,14 @@ def main() -> int:
     print()
 
     if args.print_only:
-        print("[print-only] .mcp.json not written.")
+        print("[print-only] nothing written.")
     else:
         target = os.path.join(ROOT, ".mcp.json")
         with open(target, "w", encoding="utf-8") as fh:
             fh.write(pretty + "\n")
         print(f"[ok] Wrote {target}")
+        if args.claude_desktop:
+            write_claude_desktop(mcp_config["mcpServers"]["subaiagents"])
 
     if args.persist:
         if adb_path:

@@ -50,11 +50,16 @@ pip install -r requirements.txt
 python scripts/setup.py
 ```
 
+- **Claude 데스크톱 앱**을 쓰면 `--claude-desktop` 추가 → 앱 설정에 자동 등록:
+  `python scripts/setup.py --claude-desktop` (등록 후 앱을 **트레이에서 완전히 종료 후 재실행**)
 - `codex` 명령이 있으면 자동으로 **구독 기반(무과금)** 백엔드로 설정됩니다 (먼저 `codex login` 한 번)
 - API를 쓰려면: `python scripts/setup.py --openai-key sk-...`
 - adb를 자동으로 못 찾으면 `--adb-path C:\platform-tools\adb.exe` 로 지정
 - 환경변수까지 영구 저장하려면 `--persist` 추가 (Windows `setx`)
 - 파일 안 쓰고 확인만: `--print-only`
+
+> **Claude Code(CLI)** 와 **Claude 데스크톱 앱** 둘 다 MCP 클라이언트라 이 서버를 그대로 씁니다.
+> CLI는 `.mcp.json`(프로젝트 폴더) 또는 `claude mcp add`, 앱은 `--claude-desktop` 로 등록하세요.
 
 생성된 `.mcp.json`에는 절대경로가 채워지고 `PYTHONPATH`까지 지정되어 **PATH 설정 없이도** 동작합니다.
 실행 후 Claude Code를 재시작하고 `/mcp`로 확인하세요.
