@@ -16,6 +16,7 @@ from mcp.server.fastmcp import FastMCP
 from . import adb as _adb
 from . import chatgpt as _chatgpt
 from .logmon import monitor as _monitor
+from .procmon import manager as _jobs
 
 mcp = FastMCP("subaiagents")
 
@@ -143,6 +144,120 @@ def adb_connect(host_port: str) -> dict:
 def adb_disconnect(host_port: str = "") -> dict:
     """Disconnect a TCP/IP device (all if host_port omitted)."""
     return _adb.disconnect(host_port)
+
+
+# --------------------------------------------------------------------------
+# ADB automation / repeated-execution tools
+# --------------------------------------------------------------------------
+
+@mcp.tool()
+def adb_wait_for_device(timeout: int = 60, wait_for_boot: bool = False,
+                        serial: Optional[str] = None) -> dict:
+    """Block until the device is connected (and optionally fully booted).
+
+    Use in automation flows that continue after a reboot/reconnect.
+    """
+    return _adb.wait_for_device(timeout=timeout, wait_for_boot=wait_for_boot,
+                                serial=serial)
+
+
+@mcp.tool()
+def adb_start_app(package: str, activity: str = "",
+                  serial: Optional[str] = None) -> dict:
+    """Launch an app by package (LAUNCHER intent), or a specific activity."""
+    return _adb.start_app(package, activity=activity, serial=serial)
+
+
+@mcp.tool()
+def adb_stop_app(package: str, serial: Optional[str] = None) -> dict:
+    """Force-stop an app."""
+    return _adb.stop_app(package, serial=serial)
+
+
+@mcp.tool()
+def adb_clear_app(package: str, serial: Optional[str] = None) -> dict:
+    """Clear an app's data (fresh state between repeated test runs)."""
+    return _adb.clear_app(package, serial=serial)
+
+
+@mcp.tool()
+def adb_getprop(prop: str = "", serial: Optional[str] = None) -> dict:
+    """Read a system property (all properties if `prop` omitted)."""
+    return _adb.getprop(prop=prop, serial=serial)
+
+
+@mcp.tool()
+def adb_repeat_shell(command: str, times: int = 3, interval_sec: float = 1.0,
+                     stop_on_error: bool = False,
+                     serial: Optional[str] = None) -> dict:
+    """Run a shell command repeatedly, collecting each run's output.
+
+    Good for polling, monitoring, or flakiness checks. `times` is capped by
+    SUBAI_REPEAT_MAX_TIMES.
+    """
+    return _adb.repeat_shell(command, times=times, interval_sec=interval_sec,
+                             stop_on_error=stop_on_error, serial=serial)
+
+
+@mcp.tool()
+def adb_screenrecord(seconds: int = 10, filename: str = "",
+                     serial: Optional[str] = None) -> dict:
+    """Record the screen for `seconds` and pull the mp4 to the host.
+
+    Blocks for ~`seconds` (max 180). For long unattended captures, run
+    `adb shell screenrecord ...` through bg_run instead.
+    """
+    return _adb.screenrecord(seconds=seconds, filename=filename, serial=serial)
+
+
+# --------------------------------------------------------------------------
+# Background command tools (offload long-running commands)
+# --------------------------------------------------------------------------
+
+@mcp.tool()
+def bg_run(command: str, use_shell: bool = False, cwd: str = "") -> dict:
+    """Start a command in the background; returns a job_id.
+
+    Fire-and-continue for anything long-running (adb screenrecord, a build,
+    `adb shell top`, etc.). Poll it with bg_output, block with bg_wait, and
+    stop it with bg_stop.
+
+    Args:
+        command: Command line (split like a shell unless use_shell=True).
+        use_shell: Run through the OS shell (enables pipes/redirection).
+        cwd: Optional working directory.
+    """
+    return _jobs.run(command, use_shell=use_shell, cwd=cwd or None)
+
+
+@mcp.tool()
+def bg_output(job_id: str, max_lines: int = 500) -> dict:
+    """Return output captured since the last read (cursor advances)."""
+    job = _jobs.get(job_id)
+    if not job:
+        return {"ok": False, "error": f"No such job: {job_id}"}
+    return job.read_new(max_lines=max_lines)
+
+
+@mcp.tool()
+def bg_wait(job_id: str, timeout: int = 30) -> dict:
+    """Block until the job finishes or timeout (bounded by SUBAI_BG_WAIT_MAX_TIMEOUT)."""
+    job = _jobs.get(job_id)
+    if not job:
+        return {"ok": False, "error": f"No such job: {job_id}"}
+    return job.wait(timeout=timeout)
+
+
+@mcp.tool()
+def bg_list() -> dict:
+    """List active/known background jobs."""
+    return _jobs.list()
+
+
+@mcp.tool()
+def bg_stop(job_id: str) -> dict:
+    """Stop and remove a background job."""
+    return _jobs.stop(job_id)
 
 
 # --------------------------------------------------------------------------

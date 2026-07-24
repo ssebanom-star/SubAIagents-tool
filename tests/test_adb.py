@@ -101,3 +101,48 @@ def test_default_serial_used(monkeypatch):
     captured = _capture_cmd(monkeypatch)
     adb.shell("ls")
     assert captured["cmd"][:3] == ["/usr/bin/adb", "-s", "DEFAULT1"]
+
+
+def test_start_app_launcher(monkeypatch):
+    captured = _capture_cmd(monkeypatch)
+    adb.start_app("com.example.app")
+    assert captured["cmd"] == [
+        "/usr/bin/adb", "shell", "monkey", "-p", "com.example.app",
+        "-c", "android.intent.category.LAUNCHER", "1"]
+
+
+def test_start_app_with_activity(monkeypatch):
+    # A bare ".Activity" is composed into "package/.Activity" for `am start -n`.
+    captured = _capture_cmd(monkeypatch)
+    adb.start_app("com.example.app", activity=".MainActivity")
+    assert captured["cmd"] == [
+        "/usr/bin/adb", "shell", "am", "start", "-n",
+        "com.example.app/.MainActivity"]
+    # A fully-qualified component is passed through unchanged.
+    captured = _capture_cmd(monkeypatch)
+    adb.start_app("com.example.app", activity="com.other/.Act")
+    assert captured["cmd"][-1] == "com.other/.Act"
+
+
+def test_stop_and_clear_app(monkeypatch):
+    captured = _capture_cmd(monkeypatch)
+    adb.stop_app("com.example.app")
+    assert captured["cmd"][-3:] == ["am", "force-stop", "com.example.app"]
+    captured = _capture_cmd(monkeypatch)
+    adb.clear_app("com.example.app")
+    assert captured["cmd"][-3:] == ["pm", "clear", "com.example.app"]
+
+
+def test_repeat_shell_collects_runs(monkeypatch):
+    _capture_cmd(monkeypatch, stdout="ok")
+    result = adb.repeat_shell("echo ok", times=4, interval_sec=0)
+    assert result["executed"] == 4
+    assert result["succeeded"] == 4
+    assert [r["iteration"] for r in result["runs"]] == [1, 2, 3, 4]
+
+
+def test_repeat_shell_caps_times(monkeypatch):
+    monkeypatch.setattr(config, "REPEAT_MAX_TIMES", 5)
+    _capture_cmd(monkeypatch, stdout="x")
+    result = adb.repeat_shell("echo x", times=1000, interval_sec=0)
+    assert result["executed"] == 5

@@ -121,6 +121,23 @@ claude mcp add subaiagents -- python -m subaiagents.server
 
 모든 도구는 선택적 `serial` 인자로 기기를 지정할 수 있습니다(미지정 시 기본 기기).
 
+### ADB 자동화 / 반복 실행
+- `adb_wait_for_device(timeout=60, wait_for_boot=False)` — 기기 연결(및 부팅완료)까지 대기 (재부팅 후 자동화에 필수)
+- `adb_start_app(package, activity="")` — 앱 실행(LAUNCHER 인텐트 또는 특정 액티비티)
+- `adb_stop_app(package)` — 앱 강제 종료
+- `adb_clear_app(package)` — 앱 데이터 초기화(반복 테스트마다 초기 상태)
+- `adb_getprop(prop="")` — 시스템 속성 조회
+- `adb_repeat_shell(command, times=3, interval_sec=1.0, stop_on_error=False)` — shell 명령 반복 실행 + 결과 수집(폴링/플레이키 확인)
+- `adb_screenrecord(seconds=10, filename="")` — 화면 녹화 후 호스트로 저장
+
+### 백그라운드 명령 (오래 걸리는 작업 짬처리)
+MCP 도구는 요청/응답이라 오래 걸리는 명령은 도구 호출을 막습니다. 백그라운드로 던져두고 나중에 확인합니다.
+
+- `bg_run(command, use_shell=False, cwd="")` — 임의 명령을 백그라운드로 시작 → `job_id`
+- `bg_output(job_id, max_lines=500)` — 직전 이후 새 출력만
+- `bg_wait(job_id, timeout=30)` — 완료까지 대기(상한 `SUBAI_BG_WAIT_MAX_TIMEOUT`)
+- `bg_list()` / `bg_stop(job_id)` — 목록 / 중지
+
 ### 실시간 로그 모니터링
 백그라운드에서 `adb logcat`을 계속 돌리며 로그를 버퍼에 수집합니다. MCP는 스트리밍 푸시가 안 되므로
 "세션 시작 → 폴링/감시/분석" 방식으로 실시간 로그를 다룹니다.
@@ -142,7 +159,8 @@ claude mcp add subaiagents -- python -m subaiagents.server
 - `chatgpt_set_model(model)` / `chatgpt_get_model()` — **응답 모델 지정**/조회
 
 #### 응답 모델 지정
-모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > 환경변수 기본값 > 백엔드 기본값**.
+Codex 백엔드 기본 모델은 **`gpt-5.6-luna`**(빠르고 저렴한 GPT-5.6 등급)로 고정돼 있습니다.
+모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > `SUBAI_CODEX_MODEL` 환경변수 > 기본값(gpt-5.6-luna)**.
 
 - 세션 중 바꾸기(재시작 불필요): Claude에게 *"모델을 gpt-5-codex로 바꿔줘"* → `chatgpt_set_model("gpt-5-codex")`
 - 한 번만 다른 모델로: 각 도구의 `model=` 인자 사용

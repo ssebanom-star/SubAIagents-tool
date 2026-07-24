@@ -254,3 +254,124 @@ def connect(host_port: str) -> dict:
 
 def disconnect(host_port: str = "") -> dict:
     return _run(["disconnect"] + ([host_port] if host_port else []))
+
+
+# --- Automation / repeated-execution helpers -------------------------------
+
+def wait_for_device(timeout: int = 60, wait_for_boot: bool = False,
+                    serial: Optional[str] = None) -> dict:
+    """Block until the device is connected (and optionally fully booted).
+
+    Handy in automation loops that reconnect after a reboot before continuing.
+    """
+    import time
+
+    timeout = max(1, min(timeout, 600))
+    result = _run(["wait-for-device"], serial=serial, timeout=timeout)
+    if not result["ok"]:
+        return result
+    if wait_for_boot:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            boot = _run(["shell", "getprop", "sys.boot_completed"], serial=serial)
+            if boot["ok"] and boot["stdout"].strip() == "1":
+                result["boot_completed"] = True
+                return result
+            time.sleep(1)
+        result["boot_completed"] = False
+    return result
+
+
+def start_app(package: str, activity: str = "", serial: Optional[str] = None) -> dict:
+    """Launch an app. Uses the LAUNCHER intent when no activity is given."""
+    if activity:
+        component = activity if "/" in activity else f"{package}/{activity}"
+        return _run(["shell", "am", "start", "-n", component], serial=serial)
+    return _run(
+        ["shell", "monkey", "-p", package,
+         "-c", "android.intent.category.LAUNCHER", "1"],
+        serial=serial,
+    )
+
+
+def stop_app(package: str, serial: Optional[str] = None) -> dict:
+    """Force-stop an app."""
+    return _run(["shell", "am", "force-stop", package], serial=serial)
+
+
+def clear_app(package: str, serial: Optional[str] = None) -> dict:
+    """Clear an app's data (factory-fresh state for repeated test runs)."""
+    return _run(["shell", "pm", "clear", package], serial=serial)
+
+
+def getprop(prop: str = "", serial: Optional[str] = None) -> dict:
+    """Read a system property (or all properties if `prop` is empty)."""
+    args = ["shell", "getprop"] + ([prop] if prop else [])
+    return _run(args, serial=serial)
+
+
+def repeat_shell(command: str, times: int = 3, interval_sec: float = 1.0,
+                 serial: Optional[str] = None,
+                 stop_on_error: bool = False) -> dict:
+    """Run a shell command repeatedly, collecting each run's output.
+
+    Suited to polling/monitoring or flakiness checks. `times` is capped by
+    SUBAI_REPEAT_MAX_TIMES.
+    """
+    import time
+
+    times = max(1, min(times, config.REPEAT_MAX_TIMES))
+    interval_sec = max(0.0, min(interval_sec, 3600))
+    runs = []
+    for i in range(times):
+        res = shell(command, serial=serial)
+        runs.append({
+            "iteration": i + 1,
+            "ok": res["ok"],
+            "returncode": res["returncode"],
+            "stdout": res["stdout"],
+            "stderr": res["stderr"],
+        })
+        if stop_on_error and not res["ok"]:
+            break
+        if i < times - 1:
+            time.sleep(interval_sec)
+    ok_count = sum(1 for r in runs if r["ok"])
+    return {
+        "ok": True,
+        "command": command,
+        "requested": times,
+        "executed": len(runs),
+        "succeeded": ok_count,
+        "failed": len(runs) - ok_count,
+        "runs": runs,
+    }
+
+
+def screenrecord(seconds: int = 10, filename: str = "",
+                 serial: Optional[str] = None) -> dict:
+    """Record the screen for `seconds`, then pull the mp4 to the host.
+
+    Blocks for roughly `seconds`. For unattended long recordings, drive
+    `adb shell screenrecord` via the background job tools instead.
+    """
+    import os
+    import time
+
+    seconds = max(1, min(seconds, 180))  # screenrecord hard limit is 180s
+    os.makedirs(config.SCREENSHOT_DIR, exist_ok=True)
+    if not filename:
+        filename = f"screenrecord_{int(time.time())}.mp4"
+    local_path = os.path.join(config.SCREENSHOT_DIR, filename)
+    remote_tmp = "/sdcard/__subai_rec.mp4"
+
+    rec = _run(
+        ["shell", "screenrecord", "--time-limit", str(seconds), remote_tmp],
+        serial=serial, timeout=seconds + 30,
+    )
+    if not rec["ok"]:
+        return rec
+    result = pull(remote_tmp, local_path, serial=serial)
+    _run(["shell", "rm", remote_tmp], serial=serial)  # best-effort cleanup
+    result["saved_to"] = local_path if result["ok"] else None
+    return result

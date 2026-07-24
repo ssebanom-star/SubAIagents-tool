@@ -46,6 +46,18 @@ LOG_BUFFER_LINES: int = _int_env("SUBAI_LOG_BUFFER_LINES", 5000)
 LOG_WATCH_MAX_TIMEOUT: int = _int_env("SUBAI_LOG_WATCH_MAX_TIMEOUT", 300)
 
 
+# --- Background jobs & repeated execution ----------------------------------
+
+# Max output lines retained per background job (ring buffer).
+BG_BUFFER_LINES: int = _int_env("SUBAI_BG_BUFFER_LINES", 5000)
+
+# Upper bound (seconds) for a single bg_wait / adb_wait_for_device call.
+BG_WAIT_MAX_TIMEOUT: int = _int_env("SUBAI_BG_WAIT_MAX_TIMEOUT", 600)
+
+# Safety cap on iterations for adb_repeat_shell.
+REPEAT_MAX_TIMES: int = _int_env("SUBAI_REPEAT_MAX_TIMES", 500)
+
+
 # --- Sub-agent backend -----------------------------------------------------
 
 # Which backend the chatgpt_* / analyze tools use:
@@ -68,9 +80,10 @@ CODEX_ARGS: str = os.environ.get(
 
 CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 180)
 
-# Default model for the Codex backend (empty = Codex CLI's own default).
-# e.g. "gpt-5-codex", "o4-mini". Per-call `model` args override this.
-CODEX_MODEL: str = os.environ.get("SUBAI_CODEX_MODEL", "").strip()
+# Default model for the Codex backend. Fixed to gpt-5.6-luna (OpenAI's fast,
+# low-cost GPT-5.6 tier, selectable in Codex with a ChatGPT plan). Override via
+# SUBAI_CODEX_MODEL, or per-call `model` args.
+CODEX_MODEL: str = os.environ.get("SUBAI_CODEX_MODEL", "gpt-5.6-luna").strip()
 
 
 # --- ChatGPT / OpenAI related ---------------------------------------------
