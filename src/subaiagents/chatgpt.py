@@ -243,9 +243,10 @@ def _cleanup(path: Optional[str]) -> None:
 
 
 def _chat(system: str, user: str, model: Optional[str] = None,
-          timeout: Optional[int] = None) -> dict:
-    # Precedence: explicit per-call model > runtime override > backend default.
-    chosen = (model or "").strip() or _runtime_model
+          timeout: Optional[int] = None, default_model: str = "") -> dict:
+    # Precedence: explicit per-call model > runtime override > operation-specific
+    # default (e.g. review) > backend default.
+    chosen = (model or "").strip() or _runtime_model or default_model
 
     if _select_backend() == "codex":
         return _codex_chat(system, user, model=chosen, timeout=timeout)
@@ -334,7 +335,11 @@ def analyze_logs(logs: str, question: str = "", model: str = "",
 
 def review(code_snippet: str, focus: str = "", model: str = "",
            timeout: int = 0) -> dict:
-    """Delegate a code review / improvement pass."""
+    """Delegate a code review / improvement pass.
+
+    Defaults to gpt-5.6-terra (balanced tier) unless a model is given per call
+    or set via set_model.
+    """
     system = (
         "You are a senior code reviewer. Identify bugs, risks, and concrete "
         "improvements. Be specific and terse; show corrected snippets where "
@@ -344,4 +349,5 @@ def review(code_snippet: str, focus: str = "", model: str = "",
     if focus:
         user += f" (focus: {focus})"
     user += f":\n\n{code_snippet}"
-    return _chat(system, user, model=model or None, timeout=timeout or None)
+    return _chat(system, user, model=model or None, timeout=timeout or None,
+                 default_model=config.CODEX_REVIEW_MODEL)

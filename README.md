@@ -163,8 +163,9 @@ MCP 도구는 요청/응답이라 오래 걸리는 명령은 도구 호출을 �
 무거운 작업이면 `timeout=900`처럼 크게 주면 됩니다.
 
 #### 응답 모델 지정
-Codex 백엔드 기본 모델은 **`gpt-5.6-luna`**(빠르고 저렴한 GPT-5.6 등급)로 고정돼 있습니다.
-모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > `SUBAI_CODEX_MODEL` 환경변수 > 기본값(gpt-5.6-luna)**.
+Codex 백엔드 기본 모델은 **`gpt-5.6-luna`**(빠르고 저렴)로 고정돼 있고, **코드 리뷰(`chatgpt_review`)만 기본 `gpt-5.6-terra`**(균형 등급)를 씁니다.
+모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > 작업별 기본(리뷰=terra) > `SUBAI_CODEX_MODEL` 기본값(luna)**.
+리뷰 기본은 `SUBAI_CODEX_REVIEW_MODEL`로 조정합니다.
 
 - 세션 중 바꾸기(재시작 불필요): Claude에게 *"모델을 gpt-5-codex로 바꿔줘"* → `chatgpt_set_model("gpt-5-codex")`
 - 한 번만 다른 모델로: 각 도구의 `model=` 인자 사용

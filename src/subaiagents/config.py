@@ -90,6 +90,12 @@ CODEX_MAX_TIMEOUT: int = _int_env("SUBAI_CODEX_MAX_TIMEOUT", 1800)
 # SUBAI_CODEX_MODEL, or per-call `model` args.
 CODEX_MODEL: str = os.environ.get("SUBAI_CODEX_MODEL", "gpt-5.6-luna").strip()
 
+# Default model for code review specifically (gpt-5.6-terra: the balanced
+# GPT-5.6 tier, better for judgment-heavy review than the fast Luna default).
+CODEX_REVIEW_MODEL: str = os.environ.get(
+    "SUBAI_CODEX_REVIEW_MODEL", "gpt-5.6-terra"
+).strip()
+
 
 # --- ChatGPT / OpenAI related ---------------------------------------------
 
