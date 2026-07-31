@@ -78,7 +78,12 @@ CODEX_ARGS: str = os.environ.get(
     "SUBAI_CODEX_ARGS", "exec --skip-git-repo-check"
 ).strip()
 
-CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 180)
+# Default per-call timeout when a tool doesn't specify one. The AI can pass a
+# larger `timeout` per call for heavier tasks, clamped to CODEX_MAX_TIMEOUT.
+CODEX_TIMEOUT: int = _int_env("SUBAI_CODEX_TIMEOUT", 300)
+
+# Hard ceiling for any single sub-agent call (protects against runaway).
+CODEX_MAX_TIMEOUT: int = _int_env("SUBAI_CODEX_MAX_TIMEOUT", 1800)
 
 # Default model for the Codex backend. Fixed to gpt-5.6-luna (OpenAI's fast,
 # low-cost GPT-5.6 tier, selectable in Codex with a ChatGPT plan). Override via

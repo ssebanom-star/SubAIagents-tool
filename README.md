@@ -158,6 +158,10 @@ MCP 도구는 요청/응답이라 오래 걸리는 명령은 도구 호출을 �
 - `chatgpt_analyze_logs(logs, question="", model="")` — 임의의 로그 텍스트를 GPT가 읽고 판단(세션 무관)
 - `chatgpt_set_model(model)` / `chatgpt_get_model()` — **응답 모델 지정**/조회
 
+모든 `chatgpt_*` 도구는 **`timeout`(초) 인자**를 받습니다. AI가 작업 크기에 맞춰 직접 지정하며,
+`0`이면 기본값(`SUBAI_CODEX_TIMEOUT`, 기본 300초)을 쓰고 상한은 `SUBAI_CODEX_MAX_TIMEOUT`(기본 1800초)입니다.
+무거운 작업이면 `timeout=900`처럼 크게 주면 됩니다.
+
 #### 응답 모델 지정
 Codex 백엔드 기본 모델은 **`gpt-5.6-luna`**(빠르고 저렴한 GPT-5.6 등급)로 고정돼 있습니다.
 모델 우선순위: **호출별 `model=` 인자 > `chatgpt_set_model` 런타임 설정 > `SUBAI_CODEX_MODEL` 환경변수 > 기본값(gpt-5.6-luna)**.

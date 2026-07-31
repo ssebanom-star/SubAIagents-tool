@@ -316,7 +316,7 @@ def adb_logcat_watch(session_id: str, pattern: str, timeout: int = 30) -> dict:
 
 @mcp.tool()
 def adb_logcat_analyze(session_id: str, question: str = "", lines: int = 300,
-                       model: str = "") -> dict:
+                       model: str = "", timeout: int = 0) -> dict:
     """Hand recent logs to the ChatGPT sub-agent to read and judge.
 
     Reads the last `lines` from the session and asks ChatGPT for a verdict
@@ -328,6 +328,7 @@ def adb_logcat_analyze(session_id: str, question: str = "", lines: int = 300,
         question: Optional specific question (e.g. "왜 앱이 죽었어?").
         lines: How many recent lines to feed to GPT.
         model: Optional model override.
+        timeout: Seconds to allow (0 = default); raise for large log dumps.
     """
     session = _monitor.get(session_id)
     if not session:
@@ -337,7 +338,7 @@ def adb_logcat_analyze(session_id: str, question: str = "", lines: int = 300,
         return {"ok": True, "session_id": session_id,
                 "note": "No log lines captured yet.", "content": ""}
     result = _chatgpt.analyze_logs("\n".join(tail), question=question,
-                                   model=model)
+                                   model=model, timeout=timeout)
     result["session_id"] = session_id
     result["lines_analyzed"] = len(tail)
     return result
@@ -361,7 +362,7 @@ def adb_logcat_list() -> dict:
 
 @mcp.tool()
 def chatgpt_code(task: str, context: str = "", language: str = "",
-                 model: str = "") -> dict:
+                 model: str = "", timeout: int = 0) -> dict:
     """Delegate an auxiliary coding task to ChatGPT to save Claude tokens.
 
     Use for boilerplate, scaffolding, or self-contained helpers where Claude
@@ -372,20 +373,28 @@ def chatgpt_code(task: str, context: str = "", language: str = "",
         context: Constraints, signatures, or surrounding code to respect.
         language: Target language (e.g. "python", "kotlin").
         model: Optional model override (defaults to the configured model).
+        timeout: Seconds to allow (0 = default). Set higher for big/complex
+            tasks that need more time; capped by SUBAI_CODEX_MAX_TIMEOUT.
     """
-    return _chatgpt.code(task, context=context, language=language, model=model)
+    return _chatgpt.code(task, context=context, language=language, model=model,
+                         timeout=timeout)
 
 
 @mcp.tool()
-def chatgpt_ask(prompt: str, model: str = "") -> dict:
-    """Delegate a general question/lookup to ChatGPT to save Claude tokens."""
-    return _chatgpt.ask(prompt, model=model)
+def chatgpt_ask(prompt: str, model: str = "", timeout: int = 0) -> dict:
+    """Delegate a general question/lookup to ChatGPT to save Claude tokens.
+
+    `timeout` (seconds, 0 = default) lets you allow more time for a hard query.
+    """
+    return _chatgpt.ask(prompt, model=model, timeout=timeout)
 
 
 @mcp.tool()
-def chatgpt_review(code_snippet: str, focus: str = "", model: str = "") -> dict:
-    """Delegate a code review pass to ChatGPT."""
-    return _chatgpt.review(code_snippet, focus=focus, model=model)
+def chatgpt_review(code_snippet: str, focus: str = "", model: str = "",
+                   timeout: int = 0) -> dict:
+    """Delegate a code review pass to ChatGPT (`timeout` seconds, 0 = default)."""
+    return _chatgpt.review(code_snippet, focus=focus, model=model,
+                           timeout=timeout)
 
 
 @mcp.tool()
@@ -407,13 +416,16 @@ def chatgpt_get_model() -> dict:
 
 
 @mcp.tool()
-def chatgpt_analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
+def chatgpt_analyze_logs(logs: str, question: str = "", model: str = "",
+                         timeout: int = 0) -> dict:
     """Have ChatGPT read & judge arbitrary log text (not tied to a session).
 
     Use when you already have log lines (from adb_logcat, a file, etc.) and
-    want GPT to do the reading/judging to save Claude tokens.
+    want GPT to do the reading/judging to save Claude tokens. `timeout` seconds
+    (0 = default) can be raised for large log dumps.
     """
-    return _chatgpt.analyze_logs(logs, question=question, model=model)
+    return _chatgpt.analyze_logs(logs, question=question, model=model,
+                                 timeout=timeout)
 
 
 def main() -> None:

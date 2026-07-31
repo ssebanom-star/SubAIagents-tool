@@ -139,7 +139,15 @@ def _select_backend() -> str:
     return "codex" if _codex_executable() else "api"
 
 
-def _codex_chat(system: str, user: str, model: str = "") -> dict:
+def _resolve_timeout(explicit: Optional[int]) -> int:
+    """Per-call timeout: explicit (if >0) clamped to the ceiling, else default."""
+    if explicit and explicit > 0:
+        return min(int(explicit), config.CODEX_MAX_TIMEOUT)
+    return config.CODEX_TIMEOUT
+
+
+def _codex_chat(system: str, user: str, model: str = "",
+                timeout: Optional[int] = None) -> dict:
     """Run the sub-agent via the Codex CLI (uses your ChatGPT subscription)."""
     exe = _codex_executable()
     if not exe:
@@ -174,13 +182,14 @@ def _codex_chat(system: str, user: str, model: str = "") -> dict:
         os.close(fd)
         args = args + ["--output-last-message", last_msg_file]
 
+    eff_timeout = _resolve_timeout(timeout)
     cmd = [exe] + args + [prompt]
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.CODEX_TIMEOUT,
+            timeout=eff_timeout,
             # Critical: give codex an empty stdin (EOF) so it never blocks
             # waiting for input when there is no TTY (as under the MCP server).
             stdin=subprocess.DEVNULL,
@@ -188,7 +197,10 @@ def _codex_chat(system: str, user: str, model: str = "") -> dict:
     except subprocess.TimeoutExpired:
         _cleanup(last_msg_file)
         return {"ok": False, "content": "",
-                "error": f"Codex CLI timed out after {config.CODEX_TIMEOUT}s"}
+                "error": (f"Codex CLI timed out after {eff_timeout}s. "
+                          "Pass a larger `timeout` for heavier tasks "
+                          f"(ceiling {config.CODEX_MAX_TIMEOUT}s)."),
+                "backend": "codex"}
     except Exception as exc:  # noqa: BLE001
         _cleanup(last_msg_file)
         return {"ok": False, "content": "", "error": f"Codex CLI error: {exc}"}
@@ -216,6 +228,7 @@ def _codex_chat(system: str, user: str, model: str = "") -> dict:
         }
     return {"ok": True, "content": content, "backend": "codex",
             "model": effective_model or "(Codex CLI default)",
+            "timeout_used": eff_timeout,
             "cost": "covered by ChatGPT subscription (no API billing)"}
 
 
@@ -229,12 +242,13 @@ def _cleanup(path: Optional[str]) -> None:
         pass
 
 
-def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
+def _chat(system: str, user: str, model: Optional[str] = None,
+          timeout: Optional[int] = None) -> dict:
     # Precedence: explicit per-call model > runtime override > backend default.
     chosen = (model or "").strip() or _runtime_model
 
     if _select_backend() == "codex":
-        return _codex_chat(system, user, model=chosen)
+        return _codex_chat(system, user, model=chosen, timeout=timeout)
 
     client = _get_client()
     if client is None:
@@ -249,6 +263,7 @@ def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
             ],
             max_tokens=config.OPENAI_MAX_TOKENS,
             temperature=0.2,
+            timeout=_resolve_timeout(timeout),
         )
     except Exception as exc:  # noqa: BLE001 - surface any API error to caller
         return {"ok": False, "error": f"OpenAI API error: {exc}", "content": ""}
@@ -270,7 +285,8 @@ def _chat(system: str, user: str, model: Optional[str] = None) -> dict:
 
 # --- Public sub-agent operations ------------------------------------------
 
-def code(task: str, context: str = "", language: str = "", model: str = "") -> dict:
+def code(task: str, context: str = "", language: str = "", model: str = "",
+         timeout: int = 0) -> dict:
     """Delegate a coding task; returns code (and brief notes) from ChatGPT."""
     lang = f" in {language}" if language else ""
     system = (
@@ -281,19 +297,20 @@ def code(task: str, context: str = "", language: str = "", model: str = "") -> d
     user = f"Task{lang}:\n{task}"
     if context:
         user += f"\n\nRelevant context / constraints:\n{context}"
-    return _chat(system, user, model=model or None)
+    return _chat(system, user, model=model or None, timeout=timeout or None)
 
 
-def ask(prompt: str, model: str = "") -> dict:
+def ask(prompt: str, model: str = "", timeout: int = 0) -> dict:
     """Delegate a general question (explanation, research, lookup)."""
     system = (
         "You are a concise technical assistant. Answer directly and "
         "accurately. Avoid filler."
     )
-    return _chat(system, prompt, model=model or None)
+    return _chat(system, prompt, model=model or None, timeout=timeout or None)
 
 
-def analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
+def analyze_logs(logs: str, question: str = "", model: str = "",
+                 timeout: int = 0) -> dict:
     """Delegate log reading & judgement to ChatGPT.
 
     Offloads the token-heavy work of scanning verbose logcat output: ChatGPT
@@ -312,10 +329,11 @@ def analyze_logs(logs: str, question: str = "", model: str = "") -> dict:
     if question:
         user += f"Question: {question}\n\n"
     user += f"Log lines:\n{logs}"
-    return _chat(system, user, model=model or None)
+    return _chat(system, user, model=model or None, timeout=timeout or None)
 
 
-def review(code_snippet: str, focus: str = "", model: str = "") -> dict:
+def review(code_snippet: str, focus: str = "", model: str = "",
+           timeout: int = 0) -> dict:
     """Delegate a code review / improvement pass."""
     system = (
         "You are a senior code reviewer. Identify bugs, risks, and concrete "
@@ -326,4 +344,4 @@ def review(code_snippet: str, focus: str = "", model: str = "") -> dict:
     if focus:
         user += f" (focus: {focus})"
     user += f":\n\n{code_snippet}"
-    return _chat(system, user, model=model or None)
+    return _chat(system, user, model=model or None, timeout=timeout or None)
